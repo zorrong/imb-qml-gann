@@ -1,0 +1,275 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Travelling_Trader
+
+//@version=5
+indicator('Imbalance & QML', overlay=true, max_lines_count=500)
+
+var box[]   top_boxes     = array.new_box()
+var box[]   bottom_boxes     = array.new_box()
+var box[]   tested_obs = array.new_box()
+var bool matched = false
+
+color imb = color.new(color.yellow,50)
+color imb_tested = color.new(color.white,60)
+
+reqDate = timenow - 9999999999
+Imbcol = input.color(imb, 'Imbalance Color', inline="1" ,group='=== Information ===')
+Imbcol_tested = input.color(imb_tested, 'Mitigated Imbalance', inline="2" ,group='=== Information ===')
+TopImbalance = low[2] <= open[1] and high[0] >= close[1]
+TopImbalancesize = low[2] - high[0]
+if TopImbalance and TopImbalancesize > 0 and time >= reqDate
+    BOX1 = box.new(left=bar_index[1], top=low[2], right=bar_index[0], bottom=high[0])
+    box.set_bgcolor(BOX1, Imbcol )
+    box.set_border_color(BOX1, na )
+    array.push(top_boxes, BOX1)
+
+BottomInbalance = high[2] >= open[1] and low[0] <= close[1]
+BottomInbalancesize = low[0] - high[2]
+if BottomInbalance and BottomInbalancesize > 0 and time >= reqDate
+    BOX2 = box.new(left=bar_index[1], top=low[0], right=bar_index[0], bottom=high[2])
+    box.set_bgcolor(BOX2, Imbcol )
+    box.set_border_color(BOX2, na )
+    array.push(bottom_boxes, BOX2)
+
+if barstate.isconfirmed
+    if array.size(top_boxes) > 0
+        for i = array.size(top_boxes) - 1 to 0 by 1
+            tbox = array.get(top_boxes, i)
+            top = box.get_top(tbox)
+            bottom = box.get_bottom(tbox)
+            ago = box.get_left(tbox)
+            if high > top
+                box.set_bgcolor(tbox, Imbcol_tested)   
+                array.remove(top_boxes, i)
+                continue
+            if high > bottom //and ago < 5000
+                matched := false
+                asize = array.size(tested_obs)
+                if asize > 0
+                    for j = asize - 1 to 0 by 1
+                        tbox2 = array.get(tested_obs, j)
+                        ago2 = box.get_left(tbox2)
+                        if ago==ago2
+                            matched := true
+                            box.set_bottom(tbox, high)
+                            box.set_top(tbox2, high)
+                            break
+                if not matched
+                    BOX3 = box.copy(tbox)
+                    box.set_top(BOX3, high)
+                    box.set_bgcolor(BOX3, Imbcol_tested)   
+                    array.push(tested_obs, BOX3)
+                    box.set_bottom(tbox, high)
+
+    if array.size(bottom_boxes) > 0
+        for i = array.size(bottom_boxes) - 1 to 0 by 1
+            tbox = array.get(bottom_boxes, i)
+            top = box.get_top(tbox)
+            bottom = box.get_bottom(tbox)
+            ago = box.get_left(tbox)
+            if low < bottom 
+                box.set_bgcolor(tbox, Imbcol_tested)   
+                array.remove(bottom_boxes, i)
+                continue
+            if low < top //and ago < 5000
+                matched := false
+                asize = array.size(tested_obs)
+                if asize > 0
+                    for j = asize - 1 to 0 by 1
+                        tbox2 = array.get(tested_obs, j)
+                        ago2 = box.get_left(tbox2)
+                        if ago==ago2
+                            matched := true
+                            box.set_top(tbox, low)
+                            box.set_bottom(tbox2, low)
+                            break
+                if not matched
+                    BOX4 = box.copy(tbox)
+                    box.set_bottom(BOX4, low)
+                    box.set_bgcolor(BOX4, Imbcol_tested)   
+                    array.push(tested_obs, BOX4)
+                    box.set_top(tbox, low)
+
+
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © EmreKb
+
+//@version=5
+//indicator("Quasimodo Pattern", "QML", overlay=true, max_bars_back=5000, max_labels_count=500, max_lines_count=500)
+
+zigzag_len = input.int(13, "ZigZag Length")
+
+var float[] high_points_arr = array.new_float(5)
+var int[] high_index_arr = array.new_int(5)
+var float[] low_points_arr = array.new_float(5)
+var int[] low_index_arr = array.new_int(5)
+
+to_up = high >= ta.highest(zigzag_len)
+to_down = low <= ta.lowest(zigzag_len)
+
+trend = 1
+trend := nz(trend[1], 1)
+trend := trend == 1 and to_down ? -1 : trend == -1 and to_up ? 1 : trend
+
+last_trend_up_since = ta.barssince(to_up[1])
+low_val = ta.lowest(nz(last_trend_up_since > 0 ? last_trend_up_since : 1, 1))
+low_index = bar_index - ta.barssince(low_val == low)
+
+last_trend_down_since = ta.barssince(to_down[1])
+high_val = ta.highest(nz(last_trend_down_since > 0 ? last_trend_down_since : 1, 1))
+high_index = bar_index - ta.barssince(high_val == high)
+
+if ta.change(trend) != 0
+    if trend == 1
+        array.push(low_points_arr, low_val)
+        array.push(low_index_arr, low_index)
+    if trend == -1
+        array.push(high_points_arr, high_val)
+        array.push(high_index_arr, high_index)
+
+
+f_get_high(ind) =>
+    [array.get(high_points_arr, array.size(high_points_arr) - 1 - ind), array.get(high_index_arr, array.size(high_index_arr) - 1 - ind)]
+
+
+f_get_low(ind) =>
+    [array.get(low_points_arr, array.size(low_points_arr) - 1 - ind), array.get(low_index_arr, array.size(low_index_arr) - 1 - ind)]
+
+
+[h0, h0i] = f_get_high(0)
+[l0, l0i] = f_get_low(0)
+[h1, h1i] = f_get_high(1)
+[l1, l1i] = f_get_low(1)
+[h2, h2i] = f_get_high(2)
+[l2, l2i] = f_get_low(2)
+
+bu_cond = trend == -1 and h2 > h1 and l1 > l0 and h0 > h1 and close > l1
+be_cond = trend == 1 and l2 < l1 and h1 < h0 and l0 < l1 and close < h1
+
+if bu_cond and not bu_cond[1]
+    line.new(h2i, h2, l1i, l1, color=color.green, width=1)
+    line.new(l1i, l1, h1i, h1, color=color.green, width=1)
+    line.new(h1i, h1, l0i, l0, color=color.green, width=1)
+    line.new(l0i, l0, h0i, h0, color=color.green, width=1)
+    line.new(l1i, l1, bar_index, l1, color=color.green, width=1)
+    label.new(bar_index, l1, "QM!", style=label.style_label_up, textcolor=color.white, color=color.green, size=size.tiny)
+    alert("Bullish QM!", alert.freq_once_per_bar)
+
+if be_cond and not be_cond[1]
+    line.new(l2i, l2, h1i, h1, color=color.red, width=1)
+    line.new(h1i, h1, l1i, l1, color=color.red, width=1)
+    line.new(l1i, l1, h0i, h0, color=color.red, width=1)
+    line.new(h0i, h0, l0i, l0, color=color.red, width=1)
+    line.new(h1i, h1, bar_index, h1, color=color.red, width=1)
+    label.new(bar_index, h1, "QM!", style=label.style_label_down, textcolor=color.white, color=color.red, size=size.tiny)
+    alert("Bearish QM!", alert.freq_once_per_bar)
+    
+    
+    
+//@version=5
+//indicator('Gann Swing Chart [One-Bar]', shorttitle='GWS', overlay=true, max_lines_count=500)
+
+//-----Input-------
+DefaultGannSetting = "GannSwingSetting"
+showGann = input.bool(true, 'Show Gann', group=DefaultGannSetting, inline = "Line1")
+colorGann = input.color(color.aqua, 'Color/Width', group=DefaultGannSetting, inline = "Line1")
+widthGann = input.int(defval=1,title = "",minval=1, group=DefaultGannSetting , step=1, inline = "Line1")
+
+DefaultChoChSetting = "Line ChoCh Setting"
+showChoCh = input.bool(true, 'Show ChoCh', group=DefaultChoChSetting, inline = "Line1")
+lineChoCh = input.string(title="Line Style",options=["solid (─)", "dotted (┈)", "dashed (╌)"],group=DefaultChoChSetting,defval="solid (─)",inline = "Line2")
+lineStyleChoCh = lineChoCh == "dotted (┈)" ? line.style_dotted : lineChoCh == "dashed (╌)" ? line.style_dashed : line.style_solid
+colorChoCh = input.color(color.red, "Color/Width", group=DefaultChoChSetting, inline = "Line3")
+widthChoCh = input.int(defval=1,title = "",minval=1, group=DefaultChoChSetting , step=1, inline = "Line3")
+alertContent = input.string(title="Alert content ChoCh",defval=" => ChoCh",group=DefaultChoChSetting,inline = "Line4")
+
+// Funtion
+arrayPopPush(_array,_value) =>
+    array.pop(_array)
+    array.push(_array,_value)
+arrayShiftPush(_array,_value) =>
+    array.shift(_array)
+    array.push(_array,_value)
+
+var arrayX = array.new_int(5,bar_index)
+var arrayY = array.new_float()
+line lineGann = na
+int drawLine = 0
+highPrev = high
+lowPrev = low
+bool runCheckChoCh = false
+if(array.size(arrayY) == 0)
+	array.push(arrayY,close - math.abs(high - low)*1)
+	array.push(arrayY,close + math.abs(high - low)*1)
+	array.push(arrayY,close - math.abs(high - low)*2)
+	array.push(arrayY,close + math.abs(high - low)*2)
+	array.push(arrayY,close)
+
+// 0:Tiếp tục 1:Đảo chiều; // Outsidebar 2:Tiếp tục 3:Tiếp tục và Đảo chiều
+drawLine := 0
+runCheckChoCh := runCheckChoCh[1]
+if(high[0] > highPrev[1] and low[0] > lowPrev[1])
+	if(array.get(arrayY,4) >= array.get(arrayY,3))
+	    if(high[0] > array.get(arrayY,4))
+		    arrayPopPush(arrayX,bar_index)
+	        arrayPopPush(arrayY,high[0])
+	else
+		arrayShiftPush(arrayX,bar_index)
+	    arrayShiftPush(arrayY,high[0])
+		drawLine := 1
+		runCheckChoCh := true
+else if(high[0] < highPrev[1] and low[0] < lowPrev[1])
+	if(array.get(arrayY,4) >= array.get(arrayY,3))
+		arrayShiftPush(arrayX,bar_index)
+	    arrayShiftPush(arrayY,low[0])
+		drawLine := 1
+		runCheckChoCh := true
+	else
+	    if(low[0] < array.get(arrayY,4))
+		    arrayPopPush(arrayX,bar_index)
+	        arrayPopPush(arrayY,low[0])
+else if(high[0] >= highPrev[1] and low[0] <= lowPrev[1])
+    if(array.get(arrayY,4) > array.get(arrayY,3))
+        if(high[0] > array.get(arrayY,4))
+		    arrayPopPush(arrayX,bar_index)
+	        arrayPopPush(arrayY,high[0])
+	        drawLine := 2
+        if(array.get(arrayY,3) > low[0])
+		    arrayShiftPush(arrayX,bar_index)
+		    arrayShiftPush(arrayY,low[0])
+		    drawLine := 3
+			runCheckChoCh := true
+	else if(array.get(arrayY,4) < array.get(arrayY,3))
+	    if(low[0] < array.get(arrayY,4))
+		    arrayPopPush(arrayX,bar_index)
+	        arrayPopPush(arrayY,low[0])
+	        drawLine := 2
+        if(high[0] > array.get(arrayY,3))
+		    arrayShiftPush(arrayX,bar_index)
+		    arrayShiftPush(arrayY,high[0])
+		    drawLine := 3
+			runCheckChoCh := true
+else if(high[0] <= highPrev[1] and low[0] >= lowPrev[1])
+	highPrev := highPrev[1]
+	lowPrev := lowPrev[1]
+	
+
+if(showGann)
+    if(drawLine == 0 or drawLine == 2)
+    	line.delete(lineGann[1])
+        lineGann := line.new(array.get(arrayX,3),array.get(arrayY,3),array.get(arrayX,4),array.get(arrayY,4), color = colorGann, width = widthGann)
+    else if(drawLine == 1)
+        lineGann := line.new(array.get(arrayX,3),array.get(arrayY,3),array.get(arrayX,4),array.get(arrayY,4), color = colorGann, width = widthGann)
+    else if(drawLine == 3)
+        line.delete(lineGann[1])
+        lineGann := line.new(array.get(arrayX,2),array.get(arrayY,2),array.get(arrayX,3),array.get(arrayY,3), color = colorGann, width = widthGann)
+        lineGann := line.new(array.get(arrayX,3),array.get(arrayY,3),array.get(arrayX,4),array.get(arrayY,4), color = colorGann, width = widthGann)
+if(runCheckChoCh and ((array.get(arrayY,4) > array.get(arrayY,2) and array.get(arrayY,2) >= low[0]) or (array.get(arrayY,4) < array.get(arrayY,2) and array.get(arrayY,2) <= high[0])))
+	// Trường hợp chữ N ngược, chữ N
+    if((array.get(arrayY,1) > array.get(arrayY,2) and array.get(arrayY,1) < array.get(arrayY,3) and array.get(arrayY,4) < array.get(arrayY,2)) or (array.get(arrayY,1) < array.get(arrayY,2) and array.get(arrayY,1) > array.get(arrayY,3) and array.get(arrayY,4) > array.get(arrayY,2)))
+        runCheckChoCh := false
+        alert(syminfo.ticker + " : " + timeframe.period + alertContent)
+        if(showChoCh)
+			line.new(x1= array.get(arrayX,2) , y1=array.get(arrayY,2),x2=bar_index, y2=array.get(arrayY,2),color = colorChoCh,style = lineStyleChoCh,width = widthChoCh)
+
+
